@@ -76,5 +76,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+
+    // -------------------------------------------------------------------------
+    // ROSTERS COLLECTION
+    // -------------------------------------------------------------------------
+    
+    match /rosters/{rosterId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
   }
 }

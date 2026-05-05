@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { MapPin, Clock, CheckCircle2, AlertCircle, Camera as CameraIcon, Calendar as CalendarIcon, Navigation, Shield, FileText } from 'lucide-react';
+import { MapPin, Clock, CheckCircle2, AlertCircle, Camera as CameraIcon, Calendar as CalendarIcon, Navigation, Shield, FileText, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button, buttonVariants } from '../components/ui/button';
 import { cn } from '../lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '../components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Badge } from '../components/ui/badge';
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/auth-context';
 import { serverTimestamp, collection, doc, onSnapshot, setDoc, query, where, getDocs, limit, getDocFromServer } from 'firebase/firestore';
-import { format, isMonday, isTuesday, isWednesday, isThursday, isFriday, subMinutes, parse, addMinutes } from 'date-fns';
+import { format, isMonday, isTuesday, isWednesday, isThursday, isFriday, subMinutes, parse, addMinutes, eachDayOfInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { toast } from 'sonner';
 import { id } from 'date-fns/locale';
 import History from './History';
@@ -46,6 +49,11 @@ export default function Dashboard() {
   const [selectedLocationIndex, setSelectedLocationIndex] = useState<number | null>(null);
   const [userRosters, setUserRosters] = useState<any[]>([]);
   
+  // Bidang Roster State
+  const [showBidangRoster, setShowBidangRoster] = useState(false);
+  const [bidangUsers, setBidangUsers] = useState<any[]>([]);
+  const [bidangRosters, setBidangRosters] = useState<any[]>([]);
+  const [isFetchingBidang, setIsFetchingBidang] = useState(false);
   // Roster Sync
   useEffect(() => {
     if (!user) return;
@@ -584,6 +592,36 @@ export default function Dashboard() {
     );
   }
 
+  const fetchBidangRoster = async () => {
+    if (!profile?.bidang || isFetchingBidang) return;
+    setIsFetchingBidang(true);
+    try {
+      // 1. Fetch users in same bidang
+      const usersQ = query(collection(db, 'users'), where('bidang', '==', profile.bidang));
+      const usersSnap = await getDocs(usersQ);
+      const bUsers = usersSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
+      setBidangUsers(bUsers);
+
+      // 2. Fetch rosters for current month
+      const startStr = format(startOfMonth(now), 'yyyy-MM-dd');
+      const endStr = format(endOfMonth(now), 'yyyy-MM-dd');
+      const rosterQ = query(collection(db, 'rosters'), where('date', '>=', startStr), where('date', '<=', endStr));
+      const rosterSnap = await getDocs(rosterQ);
+      
+      const bRosters = rosterSnap.docs
+        .map(d => d.data())
+        .filter(r => bUsers.some(u => u.uid === r.userId));
+        
+      setBidangRosters(bRosters);
+      setShowBidangRoster(true);
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal mengambil jadwal piket bidang.');
+    } finally {
+      setIsFetchingBidang(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-12">
       {/* Left Panel: Check-in Actions */}
@@ -893,6 +931,73 @@ export default function Dashboard() {
                 </div>
               )}
           </CardContent>
+          <CardFooter className="bg-slate-50 border-t p-4 flex justify-between items-center">
+             <Dialog open={showBidangRoster} onOpenChange={setShowBidangRoster}>
+               <DialogTrigger asChild>
+                 <Button onClick={fetchBidangRoster} disabled={isFetchingBidang} variant="outline" className="w-full text-[10px] uppercase font-black tracking-widest border-indigo-200 text-indigo-600 hover:bg-indigo-50">
+                   <Users size={14} className="mr-2" />
+                   {isFetchingBidang ? 'Memuat Jadwal...' : 'Lihat Jadwal Piket'}
+                 </Button>
+               </DialogTrigger>
+               <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col p-0">
+                 <DialogHeader className="p-4 border-b bg-slate-50 shrink-0">
+                   <DialogTitle className="text-xs font-black uppercase tracking-widest text-slate-700">Jadwal Piket: {profile?.bidang || ''}</DialogTitle>
+                   <DialogDescription className="text-[10px] uppercase tracking-wider font-bold text-slate-400">
+                     Bulan {format(now, 'MMMM yyyy', { locale: id })}
+                   </DialogDescription>
+                 </DialogHeader>
+                 <div className="overflow-auto flex-1 p-4">
+                   <Table>
+                     <TableHeader className="bg-slate-50/80">
+                       <TableRow>
+                         <TableHead className="sticky top-0 left-0 bg-slate-50 z-30 text-[9px] uppercase font-black shadow-[2px_0_5px_rgba(0,0,0,0.05)] py-2 border-b">Pegawai</TableHead>
+                         {eachDayOfInterval({ start: startOfMonth(now), end: endOfMonth(now) }).map(date => (
+                           <TableHead key={date.toISOString()} className="sticky top-0 bg-slate-50 z-20 text-center min-w-[40px] px-1 py-2 text-[9px] font-black uppercase border-b">
+                             <span className="opacity-50">{format(date, 'EEE', { locale: id })}</span><br/>
+                             <span className="text-slate-800">{format(date, 'dd')}</span>
+                           </TableHead>
+                         ))}
+                       </TableRow>
+                     </TableHeader>
+                     <TableBody>
+                       {bidangUsers.map(emp => (
+                         <TableRow key={emp.uid} className="hover:bg-slate-50 transition-colors">
+                           <TableCell className="sticky left-0 bg-white z-10 py-2 border-r shadow-[2px_0_5px_rgba(0,0,0,0.02)] min-w-[120px]">
+                             <p className="font-black text-[10px] uppercase text-slate-700 leading-tight">{emp.displayName || emp.name || 'Pegawai'}</p>
+                           </TableCell>
+                           {eachDayOfInterval({ start: startOfMonth(now), end: endOfMonth(now) }).map(date => {
+                             const dateStr = format(date, 'yyyy-MM-dd');
+                             const roster = bidangRosters.find(r => r.userId === emp.uid && r.date === dateStr);
+                             return (
+                               <TableCell key={date.toISOString()} className="text-center p-1 border-r border-b last:border-r-0">
+                                 {roster ? (
+                                    <Badge variant="outline" className={cn(
+                                      "text-[8px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm",
+                                      roster.shiftName === 'OFF' ? "bg-slate-100 text-slate-400 border-slate-200" : "bg-indigo-50 text-indigo-600 border-indigo-200"
+                                    )}>
+                                      {roster.shiftName === 'OFF' ? 'L' : roster.shiftName}
+                                    </Badge>
+                                 ) : (
+                                    <span className="text-[8px] text-slate-300">-</span>
+                                 )}
+                               </TableCell>
+                             )
+                           })}
+                         </TableRow>
+                       ))}
+                       {bidangUsers.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={32} className="py-8 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                              Belum ada data pegawai di bidang ini.
+                            </TableCell>
+                          </TableRow>
+                       )}
+                     </TableBody>
+                   </Table>
+                 </div>
+               </DialogContent>
+             </Dialog>
+          </CardFooter>
         </Card>
       </section>
 
