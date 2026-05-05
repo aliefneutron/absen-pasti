@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role and office preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "staff"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "A single attendance entry",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "date": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "latitude": { "type": "number" },
+            "longitude": { "type": "number" }
+          }
+        },
+        "isWithinRange": { "type": "boolean" },
+        "isLate": { "type": "boolean" },
+        "selfieUrl": { "type": "string" }
+      },
+      "required": ["userId", "timestamp", "date", "selfieUrl"]
+    },
+    "OfficeSettings": {
+      "title": "OfficeSettings",
+      "description": "Global settings for the office location and working hours",
+      "type": "object",
+      "properties": {
+        "officeLat": { "type": "number" },
+        "officeLng": { "type": "number" },
+        "radius": { "type": "number" },
+        "startTime": { "type": "string" },
+        "lateTime": { "type": "string" }
+      },
+      "required": ["officeLat", "officeLng", "radius", "startTime", "lateTime"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/attendance/{recordId}": {
+      "schema": "AttendanceRecord",
+      "description": "Attendance logs"
+    },
+    "/settings/global": {
+      "schema": "OfficeSettings",
+      "description": "Global office configurations"
+    }
+  }
+}

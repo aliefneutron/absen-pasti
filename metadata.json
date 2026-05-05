@@ -1,0 +1,9 @@
+{
+  "name": "PASTI - Pagerungan Absensi Terintegrasi",
+  "description": "Aplikasi absensi pegawai berbasis lokasi dan selfie, khusus hari Selasa-Kamis. Dilengkapi rekap harian, bulanan, dan dashboard admin.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}
