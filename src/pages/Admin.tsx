@@ -41,6 +41,8 @@ export default function Admin() {
   const [searchTerm, setSearchTerm] = useState('');
   const [employeeSearchTerm, setEmployeeSearchTerm] = useState('');
   const [leaveEmployeeSearchTerm, setLeaveEmployeeSearchTerm] = useState('');
+  const [dailySearchTerm, setDailySearchTerm] = useState('');
+  const [dailyStatusFilter, setDailyStatusFilter] = useState('all');
   
   const [reportType, setReportType] = useState<'harian' | 'bulanan'>('harian');
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
@@ -547,7 +549,7 @@ export default function Admin() {
       await setDoc(doc(db, 'attendance', recordId), record);
       toast.success(`Status ${leaveForm.leaveType} berhasil disimpan untuk ${record.userName}`);
       setLeaveForm({ ...leaveForm, employeeId: '', reason: '' });
-      fetchLogs();
+      fetchLogs(reportMonth);
     } catch (err) {
       console.error(err);
       toast.error('Gagal menyimpan data izin');
@@ -776,7 +778,7 @@ export default function Admin() {
   const exportLaporanHarian = () => {
     try {
       const wb = XLSX.utils.book_new();
-      const dailyData = dailyReportData.map(item => ({
+      const dailyData = filteredDailyReportData.map(item => ({
         'Nama Lengkap': item.displayName || item.name || 'Unknown',
         'NIP': item.nip || '-',
         'Bidang': item.bidang || '-',
@@ -955,6 +957,57 @@ export default function Admin() {
     const log = logs.find(l => l.userEmail?.toLowerCase() === email && l.date === reportDate);
     const roster = rosters.find(r => (r.userId === emp.id || r.userId === emp.uid || r.userEmail?.toLowerCase() === email) && r.date === reportDate);
     return { ...emp, log, roster };
+  });
+
+  // First, filter by search term (Name, NIP, Bidang, Email) to support dynamic badge adjustments
+  const searchedDailyReportData = dailyReportData.filter(item => {
+    const searchLower = dailySearchTerm.toLowerCase().trim();
+    if (!searchLower) return true;
+    
+    return (
+      (item.displayName || item.name || '').toLowerCase().includes(searchLower) ||
+      (item.nip || '').toLowerCase().includes(searchLower) ||
+      (item.bidang || '').toLowerCase().includes(searchLower) ||
+      (item.email || '').toLowerCase().includes(searchLower)
+    );
+  });
+
+  // Stats summary for daily report buttons - dynamically adapts to active search!
+  const statsHarian = {
+    all: searchedDailyReportData.length,
+    tepatWaktu: searchedDailyReportData.filter(item => item.log && !item.log.isLeave && !item.log.isLate).length,
+    terlambat: searchedDailyReportData.filter(item => item.log && !item.log.isLeave && item.log.isLate).length,
+    izin: searchedDailyReportData.filter(item => item.log?.isLeave === true).length,
+    alfa: searchedDailyReportData.filter(item => !item.log && item.roster && item.roster.shiftName !== 'OFF').length,
+    libur: searchedDailyReportData.filter(item => !item.log && (!item.roster || item.roster.shiftName === 'OFF')).length,
+  };
+
+  // Filtered Daily Report Data based on status filters applied to the searched list
+  const filteredDailyReportData = searchedDailyReportData.filter(item => {
+    if (dailyStatusFilter === 'all') return true;
+
+    const hasLog = !!item.log;
+    const isLeave = item.log?.isLeave === true;
+    const isLate = item.log?.isLate === true;
+    const isRosterActive = item.roster && item.roster.shiftName !== 'OFF';
+
+    if (dailyStatusFilter === 'tepat_waktu') {
+      return hasLog && !isLeave && !isLate;
+    }
+    if (dailyStatusFilter === 'terlambat') {
+      return hasLog && !isLeave && isLate;
+    }
+    if (dailyStatusFilter === 'izin') {
+      return isLeave;
+    }
+    if (dailyStatusFilter === 'alfa') {
+      return !hasLog && isRosterActive;
+    }
+    if (dailyStatusFilter === 'libur') {
+      return !hasLog && !isRosterActive;
+    }
+
+    return true;
   });
 
   // Generate Monthly Report Data
@@ -1188,67 +1241,201 @@ export default function Admin() {
           <Card className="border border-slate-200 shadow-sm overflow-hidden bg-white">
              {reportType === 'harian' ? (
                 <>
-                <CardHeader className="p-4 border-b bg-slate-50/50">
-                  <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                    Laporan Presensi Harian: {(() => {
-                      const [y, m, d] = reportDate.split('-');
-                      return `${d}-${m}-${y}`;
-                    })()}
-                  </h3>
-                </CardHeader>
-                <div className="overflow-x-auto">
-                   <Table>
-                      <TableHeader className="bg-slate-50/80">
-                         <TableRow>
-                           <TableHead className="font-black text-[9px] uppercase tracking-widest py-4">Nama Pegawai</TableHead>
-                           <TableHead className="font-black text-[9px] uppercase tracking-widest py-4">NIP / Bidang</TableHead>
-                           <TableHead className="font-black text-[9px] uppercase tracking-widest py-4">Status / Waktu</TableHead>
-                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                         {dailyReportData.map((item, idx) => (
-                            <TableRow key={idx} className="group hover:bg-slate-50 border-b border-slate-100 last:border-0 italic">
-                               <TableCell className="py-4">
-                                  <p className="font-black text-slate-800 text-[11px] leading-tight uppercase">{item.displayName || item.name || 'Unknown'}</p>
-                                  <p className="text-[9px] text-slate-400 font-mono tracking-tight">{item.email}</p>
-                               </TableCell>
-                               <TableCell className="py-4">
-                                  <p className="font-mono text-[10px] text-slate-500">{item.nip || '-'}</p>
-                                  <Badge variant="secondary" className="text-[9px] font-bold uppercase py-0 px-2 mt-1 bg-slate-100 text-slate-600">{item.bidang || '-'}</Badge>
-                               </TableCell>
-                               <TableCell className="py-4">
-                                  {item.log ? (
-                                     <>
-                                        <Badge variant={item.log.isLate ? 'destructive' : 'default'} className="text-[9px] font-black uppercase tracking-tighter shadow-none">
-                                           {item.log.isLate ? 'TERLAMBAT' : 'TEPAT WAKTU'}
-                                        </Badge>
-                                        {item.log.isLate && (
-                                           <div className="text-[9px] font-black text-rose-500 mt-1 uppercase tracking-tighter">
-                                             Terlambat: {Math.floor((item.log.lateDuration || 0) / 60)} Menit
-                                           </div>
-                                        )}
-                                                                                 <div className="text-[10px] font-mono text-slate-500 mt-1">
-                                            {format(item.log.timestamp?.toDate ? item.log.timestamp.toDate() : new Date(item.log.timestamp), 'HH:mm:ss')} | {item.log.checkOutTimestamp ? format(item.log.checkOutTimestamp?.toDate ? item.log.checkOutTimestamp.toDate() : new Date(item.log.checkOutTimestamp), 'HH:mm:ss') : '--:--:--'}
-                                         </div>
+                 <CardHeader className="p-4 border-b bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                   <div>
+                     <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                       Laporan Presensi Harian: {(() => {
+                         const [y, m, d] = reportDate.split('-');
+                         return `${d}-${m}-${y}`;
+                       })()}
+                     </h3>
+                     <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter mt-1">Total Pegawai: {statsHarian.all} Orang</p>
+                   </div>
+                   <div className="relative w-full md:w-64">
+                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                     <Input 
+                       placeholder="Cari nama, NIP, bidang..." 
+                       className="pl-9 h-8 bg-white border-slate-200 text-xs font-medium placeholder:text-slate-300 focus-visible:ring-indigo-500 shadow-sm" 
+                       value={dailySearchTerm}
+                       onChange={(e) => setDailySearchTerm(e.target.value)}
+                     />
+                   </div>
+                 </CardHeader>
+                 
+                 <div className="p-4 border-b bg-slate-50/20 flex flex-wrap gap-2 items-center">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-2">Filter Status:</span>
+                    <button
+                      onClick={() => setDailyStatusFilter('all')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 border",
+                        dailyStatusFilter === 'all'
+                          ? "bg-slate-800 text-white border-slate-800 shadow-sm scale-105"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                      )}
+                    >
+                      Semua
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded-full text-[8px] font-mono",
+                        dailyStatusFilter === 'all' ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                      )}>{statsHarian.all}</span>
+                    </button>
 
-                                     </>
-                                                                     ) : item.roster && item.roster.shiftName !== 'OFF' ? (
+                    <button
+                      onClick={() => setDailyStatusFilter('tepat_waktu')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 border",
+                        dailyStatusFilter === 'tepat_waktu'
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-sm scale-105"
+                          : "bg-white text-emerald-600 border-slate-200 hover:bg-emerald-50/30"
+                      )}
+                    >
+                      Tepat Waktu
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded-full text-[8px] font-mono",
+                        dailyStatusFilter === 'tepat_waktu' ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-600"
+                      )}>{statsHarian.tepatWaktu}</span>
+                    </button>
 
-                                     <Badge variant="outline" className="text-[9px] font-black uppercase tracking-tighter border-rose-200 text-rose-500 bg-rose-50/50">
-                                        <AlertTriangle size={10} className="mr-1"/> ALFA / TIDAK ABSEN
-                                     </Badge>
-                                                                     ) : (
-                                      <Badge variant="outline" className="text-[9px] font-black uppercase tracking-tighter border-slate-200 text-slate-400 bg-slate-50/50">
-                                         LIBUR / TIDAK TERJADWAL
-                                      </Badge>
-                                   )}
+                    <button
+                      onClick={() => setDailyStatusFilter('terlambat')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 border",
+                        dailyStatusFilter === 'terlambat'
+                          ? "bg-amber-500 text-white border-amber-500 shadow-sm scale-105"
+                          : "bg-white text-amber-600 border-slate-200 hover:bg-amber-50/30"
+                      )}
+                    >
+                      Terlambat
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded-full text-[8px] font-mono",
+                        dailyStatusFilter === 'terlambat' ? "bg-white/20 text-white" : "bg-amber-50 text-amber-600"
+                      )}>{statsHarian.terlambat}</span>
+                    </button>
 
-                               </TableCell>
-                            </TableRow>
-                         ))}
-                      </TableBody>
-                   </Table>
-                </div>
+                    <button
+                      onClick={() => setDailyStatusFilter('izin')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 border",
+                        dailyStatusFilter === 'izin'
+                          ? "bg-blue-600 text-white border-blue-600 shadow-sm scale-105"
+                          : "bg-white text-blue-600 border-slate-200 hover:bg-blue-50/30"
+                      )}
+                    >
+                      Izin / Sakit
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded-full text-[8px] font-mono",
+                        dailyStatusFilter === 'izin' ? "bg-white/20 text-white" : "bg-blue-50 text-blue-600"
+                      )}>{statsHarian.izin}</span>
+                    </button>
+
+                    <button
+                      onClick={() => setDailyStatusFilter('alfa')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 border",
+                        dailyStatusFilter === 'alfa'
+                          ? "bg-rose-600 text-white border-rose-600 shadow-sm scale-105"
+                          : "bg-white text-rose-600 border-slate-200 hover:bg-rose-50/30"
+                      )}
+                    >
+                      Alfa
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded-full text-[8px] font-mono",
+                        dailyStatusFilter === 'alfa' ? "bg-white/20 text-white" : "bg-rose-50 text-rose-600"
+                      )}>{statsHarian.alfa}</span>
+                    </button>
+
+                    <button
+                      onClick={() => setDailyStatusFilter('libur')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 border",
+                        dailyStatusFilter === 'libur'
+                          ? "bg-slate-500 text-white border-slate-500 shadow-sm scale-105"
+                          : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                      )}
+                    >
+                      Libur
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded-full text-[8px] font-mono",
+                        dailyStatusFilter === 'libur' ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                      )}>{statsHarian.libur}</span>
+                    </button>
+                 </div>
+
+                 <div className="overflow-x-auto">
+                    <Table>
+                       <TableHeader className="bg-slate-50/80">
+                          <TableRow>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest py-4">Nama Pegawai</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest py-4">NIP / Bidang</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest py-4">Status / Waktu</TableHead>
+                          </TableRow>
+                       </TableHeader>
+                       <TableBody>
+                          {filteredDailyReportData.length === 0 ? (
+                             <TableRow>
+                                <TableCell colSpan={3} className="py-8 text-center">
+                                   <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
+                                      <Search size={24} className="text-slate-300 stroke-[1.5]" />
+                                      <p className="text-xs font-black uppercase tracking-widest">Tidak ada data pegawai</p>
+                                      <p className="text-[10px] font-medium text-slate-400 normal-case">Coba sesuaikan kata kunci pencarian atau filter status Anda.</p>
+                                   </div>
+                                </TableCell>
+                             </TableRow>
+                          ) : (
+                             filteredDailyReportData.map((item, idx) => (
+                                <TableRow key={idx} className="group hover:bg-slate-50 border-b border-slate-100 last:border-0 italic">
+                                   <TableCell className="py-4">
+                                      <p className="font-black text-slate-800 text-[11px] leading-tight uppercase">{item.displayName || item.name || 'Unknown'}</p>
+                                      <p className="text-[9px] text-slate-400 font-mono tracking-tight">{item.email}</p>
+                                   </TableCell>
+                                   <TableCell className="py-4">
+                                      <p className="font-mono text-[10px] text-slate-500">{item.nip || '-'}</p>
+                                      <Badge variant="secondary" className="text-[9px] font-bold uppercase py-0 px-2 mt-1 bg-slate-100 text-slate-600">{item.bidang || '-'}</Badge>
+                                   </TableCell>
+                                   <TableCell className="py-4">
+                                      {item.log ? (
+                                         item.log.isLeave ? (
+                                            <>
+                                               <Badge variant="outline" className="text-[9px] font-black uppercase tracking-tighter border-amber-200 text-amber-700 bg-amber-50">
+                                                  IZIN / SAKIT / CUTI ({item.log.leaveType})
+                                               </Badge>
+                                               {item.log.leaveReason && (
+                                                  <p className="text-[9px] font-semibold text-slate-500 mt-1 uppercase italic">
+                                                     Alasan: {item.log.leaveReason}
+                                                  </p>
+                                               )}
+                                            </>
+                                         ) : (
+                                            <>
+                                               <Badge variant={item.log.isLate ? 'destructive' : 'default'} className="text-[9px] font-black uppercase tracking-tighter shadow-none">
+                                                  {item.log.isLate ? 'TERLAMBAT' : 'TEPAT WAKTU'}
+                                               </Badge>
+                                               {item.log.isLate && (
+                                                  <div className="text-[9px] font-black text-rose-500 mt-1 uppercase tracking-tighter">
+                                                    Terlambat: {Math.floor((item.log.lateDuration || 0) / 60)} Menit
+                                                  </div>
+                                               )}
+                                               <div className="text-[10px] font-mono text-slate-500 mt-1">
+                                                  {format(item.log.timestamp?.toDate ? item.log.timestamp.toDate() : new Date(item.log.timestamp), 'HH:mm:ss')} | {item.log.checkOutTimestamp ? format(item.log.checkOutTimestamp?.toDate ? item.log.checkOutTimestamp.toDate() : new Date(item.log.checkOutTimestamp), 'HH:mm:ss') : '--:--:--'}
+                                               </div>
+                                            </>
+                                         )
+                                      ) : item.roster && item.roster.shiftName !== 'OFF' ? (
+                                         <Badge variant="outline" className="text-[9px] font-black uppercase tracking-tighter border-rose-200 text-rose-500 bg-rose-50/50">
+                                            <AlertTriangle size={10} className="mr-1"/> ALFA / TIDAK ABSEN
+                                         </Badge>
+                                      ) : (
+                                         <Badge variant="outline" className="text-[9px] font-black uppercase tracking-tighter border-slate-200 text-slate-400 bg-slate-50/50">
+                                            LIBUR / TIDAK TERJADWAL
+                                         </Badge>
+                                      )}
+                                   </TableCell>
+                                </TableRow>
+                             ))
+                          )}
+                       </TableBody>
+                    </Table>
+                 </div>
                 </>
              ) : (
                 <>
