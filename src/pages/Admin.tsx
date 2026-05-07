@@ -541,6 +541,7 @@ export default function Admin() {
         userEmail: emp.email,
         timestamp: serverTimestamp(),
         date: leaveForm.date,
+        month: leaveForm.date.substring(0, 7),
         isLeave: true,
         leaveType: leaveForm.leaveType,
         leaveReason: leaveForm.reason
