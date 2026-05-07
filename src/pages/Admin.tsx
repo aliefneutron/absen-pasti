@@ -1510,7 +1510,8 @@ export default function Admin() {
                    {rosters.filter(r => {
                      const isToday = r.date === format(new Date(), 'yyyy-MM-dd');
                      const hasLog = logs.some(l => l.date === r.date && l.shiftName === r.shiftName && (l.userId === r.userId || l.userEmail === r.userEmail));
-                     return isToday && r.shiftName !== 'OFF' && !hasLog;
+                     const hasLeave = logs.some(l => l.date === r.date && l.isLeave === true && (l.userId === r.userId || l.userEmail === r.userEmail));
+                      return isToday && r.shiftName !== 'OFF' && !hasLog && !hasLeave;
                    }).length}
                  </h3>
                  <p className="text-[8px] font-bold text-rose-400 uppercase animate-pulse">Perlu Tindak Lanjut</p>
@@ -1519,7 +1520,12 @@ export default function Admin() {
           </div>
 
           {/* List Monitoring Detail */}
-          {rosters.filter(r => r.date === format(new Date(), 'yyyy-MM-dd') && r.shiftName !== 'OFF' && !logs.some(l => l.date === r.date && l.shiftName === r.shiftName && (l.userId === r.userId || l.userEmail === r.userEmail))).length > 0 && (
+          {rosters.filter(r => {
+             const isToday = r.date === format(new Date(), 'yyyy-MM-dd');
+             const hasLog = logs.some(l => l.date === r.date && l.shiftName === r.shiftName && (l.userId === r.userId || l.userEmail === r.userEmail));
+             const hasLeave = logs.some(l => l.date === r.date && l.isLeave === true && (l.userId === r.userId || l.userEmail === r.userEmail));
+             return isToday && r.shiftName !== 'OFF' && !hasLog && !hasLeave;
+          }).length > 0 && (
             <Card className="border border-rose-200 shadow-md bg-rose-50/30 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
                <CardHeader className="p-4 border-b border-rose-100 bg-rose-50 flex flex-row items-center justify-between">
                  <CardTitle className="text-[10px] font-black text-rose-700 uppercase tracking-widest flex items-center gap-2">
@@ -1542,7 +1548,8 @@ export default function Admin() {
                      {rosters.filter(r => {
                         const isToday = r.date === format(new Date(), 'yyyy-MM-dd');
                         const hasLog = logs.some(l => l.date === r.date && l.shiftName === r.shiftName && (l.userId === r.userId || l.userEmail === r.userEmail));
-                        return isToday && r.shiftName !== 'OFF' && !hasLog;
+                        const hasLeave = logs.some(l => l.date === r.date && l.isLeave === true && (l.userId === r.userId || l.userEmail === r.userEmail));
+                      return isToday && r.shiftName !== 'OFF' && !hasLog && !hasLeave;
                      }).map((m, idx) => (
                        <TableRow key={idx} className="border-b border-rose-50 last:border-0 hover:bg-rose-100/30 transition-colors">
                          <TableCell className="py-3">
