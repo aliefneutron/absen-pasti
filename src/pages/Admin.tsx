@@ -881,6 +881,11 @@ export default function Admin() {
           enabled: (settings as any).fridayEarlyEnd?.enabled || false,
           checkOutTime: (settings as any).fridayEarlyEnd?.checkOutTime || '10:30',
           exemptBidangs: (settings as any).fridayEarlyEnd?.exemptBidangs || ['RAWAT INAP', 'UGD'],
+        },
+        saturdayEarlyEnd: {
+          enabled: (settings as any).saturdayEarlyEnd?.enabled || false,
+          checkOutTime: (settings as any).saturdayEarlyEnd?.checkOutTime || '12:30',
+          exemptBidangs: (settings as any).saturdayEarlyEnd?.exemptBidangs || ['RAWAT INAP', 'UGD'],
         }
       };
       
@@ -2050,6 +2055,135 @@ export default function Admin() {
                                     ...settings,
                                     fridayEarlyEnd: {
                                       ...((settings as any).fridayEarlyEnd || {}),
+                                      exemptBidangs: updated,
+                                    }
+                                  } as any);
+                                }}
+                                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all border ${
+                                  isExempt
+                                    ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
+                                    : 'bg-white border-amber-200 text-amber-600 hover:border-amber-400'
+                                }`}
+                              >
+                                {isExempt ? '⛔ ' : ''}{dept}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[8px] text-amber-500 font-bold italic">
+                          * Bidang berwarna oranye = dikecualikan (shift 24 jam, absen normal).
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="w-full h-px bg-slate-100" />
+
+              {/* === ATURAN KHUSUS SABTU === */}
+              <div className="space-y-4">
+                <CardHeader className="p-0">
+                  <CardTitle className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex gap-2 items-center">
+                    <Clock size={14} className="text-amber-500" /> Aturan Khusus Sabtu — Rawat Jalan
+                  </CardTitle>
+                  <CardDescription className="text-xs font-medium text-slate-400 mt-1">
+                    Pegawai Shift Pagi (non-24 jam) dapat absen pulang lebih awal di hari Sabtu untuk keperluan rawat jalan.
+                  </CardDescription>
+                </CardHeader>
+
+                <div className="p-4 bg-amber-50/60 border border-amber-100 rounded-xl space-y-5">
+                  {/* Toggle aktif */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-amber-800 tracking-wider">Aktifkan Fitur Rawat Jalan Sabtu</p>
+                      <p className="text-[9px] text-amber-600 font-medium mt-0.5">Jika aktif, window absen pulang di hari Sabtu akan disesuaikan untuk shift pagi.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = (settings as any).saturdayEarlyEnd?.enabled || false;
+                        setSettings({
+                          ...settings,
+                          saturdayEarlyEnd: {
+                            ...((settings as any).saturdayEarlyEnd || {}),
+                            enabled: !current,
+                            checkOutTime: (settings as any).saturdayEarlyEnd?.checkOutTime || '12:30',
+                            exemptBidangs: (settings as any).saturdayEarlyEnd?.exemptBidangs || ['RAWAT INAP', 'UGD'],
+                          }
+                        } as any);
+                      }}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                        (settings as any).saturdayEarlyEnd?.enabled ? 'bg-amber-500' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform ${
+                        (settings as any).saturdayEarlyEnd?.enabled ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {(settings as any).saturdayEarlyEnd?.enabled && (
+                    <>
+                      {/* Jam Absen Pulang */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-[9px] font-black uppercase text-amber-700">Jam Absen Pulang Sabtu</Label>
+                          <Input
+                            type="time"
+                            value={(settings as any).saturdayEarlyEnd?.checkOutTime || '12:30'}
+                            onChange={(e) => setSettings({
+                              ...settings,
+                              saturdayEarlyEnd: {
+                                ...((settings as any).saturdayEarlyEnd || {}),
+                                checkOutTime: e.target.value,
+                              }
+                            } as any)}
+                            className="h-9 text-sm font-mono bg-white border-amber-200 focus-visible:ring-amber-400"
+                          />
+                          <p className="text-[8px] text-amber-600 font-bold italic">
+                            * Window aktif: dari jam ini sampai +30 menit
+                          </p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[9px] font-black uppercase text-amber-700">Contoh Window</Label>
+                          <div className="h-9 px-3 bg-white border border-amber-200 rounded-md flex items-center">
+                            <span className="text-[10px] font-mono font-black text-amber-700">
+                              {(() => {
+                                const t = (settings as any).saturdayEarlyEnd?.checkOutTime || '12:30';
+                                const [h, m] = t.split(':').map(Number);
+                                const startMin = h * 60 + m;
+                                const endMin = h * 60 + m + 30;
+                                const fmt = (min: number) => `${String(Math.floor(min / 60)).padStart(2,'0')}:${String(min % 60).padStart(2,'0')}`;
+                                return `${fmt(startMin)} – ${fmt(endMin)} WIB`;
+                              })()}
+                            </span>
+                          </div>
+                          <p className="text-[8px] text-amber-600 font-bold italic">Interval window absen pulang aktif</p>
+                        </div>
+                      </div>
+
+                      {/* Bidang yang dikecualikan */}
+                      <div className="space-y-2">
+                        <Label className="text-[9px] font-black uppercase text-amber-700">Bidang yang Dikecualikan (Shift 24 Jam)</Label>
+                        <p className="text-[8px] text-amber-600 font-bold">Bidang di bawah tetap mengikuti jam shift normal, tidak terpengaruh aturan Sabtu.</p>
+                        <div className="flex flex-wrap gap-2">
+                          {departments.map(dept => {
+                            const exempts: string[] = (settings as any).saturdayEarlyEnd?.exemptBidangs || ['RAWAT INAP', 'UGD'];
+                            const isExempt = exempts.includes(dept);
+                            return (
+                              <button
+                                key={dept}
+                                type="button"
+                                onClick={() => {
+                                  const current: string[] = (settings as any).saturdayEarlyEnd?.exemptBidangs || ['RAWAT INAP', 'UGD'];
+                                  const updated = isExempt
+                                    ? current.filter(b => b !== dept)
+                                    : [...current, dept];
+                                  setSettings({
+                                    ...settings,
+                                    saturdayEarlyEnd: {
+                                      ...((settings as any).saturdayEarlyEnd || {}),
                                       exemptBidangs: updated,
                                     }
                                   } as any);

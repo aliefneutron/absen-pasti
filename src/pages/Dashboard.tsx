@@ -14,7 +14,7 @@ import { format, isMonday, isTuesday, isWednesday, isThursday, isFriday, subMinu
 import { toast } from 'sonner';
 import { id } from 'date-fns/locale';
 import History from './History';
-import { getCurrentShift, getShiftStatus, getCheckOutStatus, getFridayEarlyCheckOutStatus } from '../lib/shift';
+import { getCurrentShift, getShiftStatus, getCheckOutStatus, getFridayEarlyCheckOutStatus, getSaturdayEarlyCheckOutStatus } from '../lib/shift';
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371e3; // metres
@@ -125,9 +125,23 @@ export default function Dashboard() {
     );
   }, [now, currentShift, settings, profile?.bidang]);
 
-  // Apakah window absen pulang sedang aktif (normal ATAU Jumat khusus)
+  // Aturan Khusus Sabtu: window absen pulang dimajukan ke sekitar 12:30
+  const saturdayEarlyInfo = useMemo(() => {
+    if (!currentShift || !settings) return null;
+    return getSaturdayEarlyCheckOutStatus(
+      now,
+      currentShift,
+      settings.saturdayEarlyEnd || null,
+      profile?.bidang || null
+    );
+  }, [now, currentShift, settings, profile?.bidang]);
+
+  // Apakah window absen pulang sedang aktif (normal ATAU Jumat khusus ATAU Sabtu khusus)
   const isEffectiveCheckOutWindow =
-    checkOutInfo?.isCheckOutWindow || fridayEarlyInfo?.isCheckOutWindow || false;
+    checkOutInfo?.isCheckOutWindow || 
+    fridayEarlyInfo?.isCheckOutWindow || 
+    saturdayEarlyInfo?.isCheckOutWindow || 
+    false;
 
 
   useEffect(() => {
@@ -709,7 +723,7 @@ export default function Dashboard() {
               {loading ? 'MEMPROSES...' : (hasAttendedToday && !hasCheckedOutToday ? 'ABSEN PULANG' : 'ABSEN DATANG')}
             </Button>
 
-            {/* Info jam khusus Jumat */}
+            {/* Info jam khusus Jumat & Sabtu */}
             {fridayEarlyInfo && !hasAttendedToday && (
               <div className="w-full max-w-[280px] bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center gap-2.5 shadow-sm">
                 <span className="text-amber-500 text-base">🕙</span>
@@ -717,6 +731,17 @@ export default function Dashboard() {
                   <p className="text-[9px] font-black uppercase tracking-widest text-amber-700">Jumat — Rawat Jalan</p>
                   <p className="text-[10px] font-bold text-amber-800 leading-tight">
                     Absen pulang tersedia pkl {fridayEarlyInfo.checkOutTime} WIB
+                  </p>
+                </div>
+              </div>
+            )}
+            {saturdayEarlyInfo && !hasAttendedToday && (
+              <div className="w-full max-w-[280px] bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center gap-2.5 shadow-sm">
+                <span className="text-amber-500 text-base">🕙</span>
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-amber-700">Sabtu — Rawat Jalan</p>
+                  <p className="text-[10px] font-bold text-amber-800 leading-tight">
+                    Absen pulang tersedia pkl {saturdayEarlyInfo.checkOutTime} WIB
                   </p>
                 </div>
               </div>
@@ -907,6 +932,36 @@ export default function Dashboard() {
                     {fridayEarlyInfo.isExpired && (
                       <p className="text-amber-800 opacity-80">
                         Window absen pulang rawat jalan telah berakhir (pukul {format(fridayEarlyInfo.checkOutWindowEnd, 'HH:mm')} WIB). Gunakan absen pulang shift normal.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Notifikasi khusus Sabtu rawat jalan */}
+              {saturdayEarlyInfo && !hasCheckedOutToday && (
+                <div className="flex items-start gap-4 p-3 bg-amber-50 border-l-4 border-amber-400 rounded-lg text-xs leading-relaxed">
+                  <div className="w-2 h-2 bg-amber-400 rounded-full mt-1.5 animate-pulse shrink-0"></div>
+                  <div>
+                    <p className="text-amber-900 font-bold uppercase text-[10px] mb-0.5 tracking-tight">⚕️ Sabtu — Rawat Jalan</p>
+                    {saturdayEarlyInfo.isTooEarly && (
+                      <p className="text-amber-800 opacity-80">
+                        Window absen pulang rawat jalan akan dibuka pukul <strong>{format(saturdayEarlyInfo.checkOutWindowStart, 'HH:mm')}</strong> WIB
+                        (s.d. {format(saturdayEarlyInfo.checkOutWindowEnd, 'HH:mm')} WIB).
+                      </p>
+                    )}
+                    {saturdayEarlyInfo.isCheckOutWindow && hasAttendedToday && (
+                      <p className="text-amber-800 opacity-80">
+                        Window absen pulang rawat jalan <strong>sedang aktif</strong> hingga pukul {format(saturdayEarlyInfo.checkOutWindowEnd, 'HH:mm')} WIB. Silakan absen pulang!
+                      </p>
+                    )}
+                    {saturdayEarlyInfo.isCheckOutWindow && !hasAttendedToday && (
+                      <p className="text-amber-800 opacity-80">
+                        Absen datang terlebih dahulu, kemudian lakukan absen pulang rawat jalan sebelum pukul {format(saturdayEarlyInfo.checkOutWindowEnd, 'HH:mm')} WIB.
+                      </p>
+                    )}
+                    {saturdayEarlyInfo.isExpired && (
+                      <p className="text-amber-800 opacity-80">
+                        Window absen pulang rawat jalan telah berakhir (pukul {format(saturdayEarlyInfo.checkOutWindowEnd, 'HH:mm')} WIB). Gunakan absen pulang shift normal.
                       </p>
                     )}
                   </div>

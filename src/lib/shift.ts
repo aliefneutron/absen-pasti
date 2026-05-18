@@ -111,11 +111,17 @@ export function getCheckOutStatus(now: Date, shift: Shift) {
   };
 }
 
-// === ATURAN KHUSUS JUMAT ===
+// === ATURAN KHUSUS JUMAT & SABTU ===
 
 export interface FridayEarlyEndConfig {
   enabled: boolean;
   checkOutTime: string;    // HH:mm, default "10:30"
+  exemptBidangs: string[]; // Bidang yang dikecualikan, e.g. ["RAWAT INAP", "UGD"]
+}
+
+export interface SaturdayEarlyEndConfig {
+  enabled: boolean;
+  checkOutTime: string;    // HH:mm, default "12:30"
   exemptBidangs: string[]; // Bidang yang dikecualikan, e.g. ["RAWAT INAP", "UGD"]
 }
 
@@ -154,6 +160,57 @@ export function getFridayEarlyCheckOutStatus(
   const checkOutBase = parse(checkOutTimeStr, 'HH:mm', now);
   const windowStart = checkOutBase;                        // default: 10:30
   const windowEnd = addMinutes(checkOutBase, 30);          // default: 11:00
+
+  const isCheckOutWindow = now >= windowStart && now <= windowEnd;
+  const isTooEarly = now < windowStart;
+  const isExpired = now > windowEnd;
+
+  return {
+    isEarlyCheckOut: true,
+    isCheckOutWindow,
+    isTooEarly,
+    isExpired,
+    checkOutWindowStart: windowStart,
+    checkOutWindowEnd: windowEnd,
+    checkOutTime: checkOutTimeStr,
+  };
+}
+
+/**
+ * Cek apakah window absen pulang khusus Sabtu berlaku untuk pegawai ini.
+ * Hanya berlaku jika:
+ * 1. Hari ini Sabtu
+ * 2. Konfigurasi saturdayEarlyEnd aktif
+ * 3. Bidang pegawai TIDAK termasuk dalam daftar exemptBidangs
+ * 4. Shift aktif adalah shift pagi (startTime sebelum jam 12:00)
+ */
+export function getSaturdayEarlyCheckOutStatus(
+  now: Date,
+  currentShift: Shift | null | undefined,
+  saturdayConfig: SaturdayEarlyEndConfig | null | undefined,
+  userBidang: string | null | undefined
+) {
+  // 1. Hanya hari Sabtu
+  if (format(now, 'EEEE') !== 'Saturday') return null;
+
+  // 2. Konfigurasi harus aktif
+  if (!saturdayConfig?.enabled) return null;
+
+  // 3. Bidang pegawai tidak boleh masuk daftar yang dikecualikan (shift 24 jam)
+  const bidang = (userBidang || '').toUpperCase().trim();
+  const exempts = (saturdayConfig.exemptBidangs || ['RAWAT INAP', 'UGD']).map((b: string) => b.toUpperCase().trim());
+  if (exempts.includes(bidang)) return null;
+
+  // 4. Hanya untuk shift pagi (startTime sebelum jam 12:00)
+  if (!currentShift) return null;
+  const startHour = parseInt(currentShift.startTime.split(':')[0], 10);
+  if (startHour >= 12) return null;
+
+  // Bangun window check-out: mulai dari jam yang dikonfigurasi, +30 menit
+  const checkOutTimeStr = saturdayConfig.checkOutTime || '12:30';
+  const checkOutBase = parse(checkOutTimeStr, 'HH:mm', now);
+  const windowStart = checkOutBase;                        // default: 12:30
+  const windowEnd = addMinutes(checkOutBase, 30);          // default: 13:00
 
   const isCheckOutWindow = now >= windowStart && now <= windowEnd;
   const isTooEarly = now < windowStart;
