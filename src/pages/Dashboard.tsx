@@ -34,6 +34,7 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 export default function Dashboard() {
   const { user, profile, isAdmin } = useAuth();
   const [now, setNow] = useState(new Date());
+  const timeOffset = useRef<number>(0);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [settings, setSettings] = useState<any>(null);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -145,7 +146,40 @@ export default function Dashboard() {
 
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
+    const syncServerTime = async () => {
+      try {
+        const start = performance.now();
+        const res = await fetch('https://timeapi.io/api/Time/current/zone?timeZone=Asia/Jakarta', { cache: 'no-store' });
+        if (!res.ok) throw new Error('TimeAPI failed');
+        const data = await res.json();
+        const serverTime = new Date(data.dateTime).getTime();
+        const latency = (performance.now() - start) / 2;
+        timeOffset.current = (serverTime + latency) - performance.now();
+      } catch (err) {
+        console.warn('TimeAPI failed, using fallback HTTP Date');
+        try {
+          const start = performance.now();
+          const res = await fetch(window.location.href, { method: 'HEAD', cache: 'no-store' });
+          const dateHeader = res.headers.get('Date');
+          if (dateHeader) {
+            const serverTime = new Date(dateHeader).getTime();
+            const latency = (performance.now() - start) / 2;
+            timeOffset.current = (serverTime + latency) - performance.now();
+          }
+        } catch (e) {
+          console.warn('All time sync methods failed');
+          // If all fails, timeOffset stays 0, fallback to local clock relative to performance.now()
+          timeOffset.current = Date.now() - performance.now();
+        }
+      }
+    };
+
+    syncServerTime();
+
+    const timer = setInterval(() => {
+      // Use performance.now() + offset to be immune to local clock manipulation during session
+      setNow(new Date(performance.now() + timeOffset.current));
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 

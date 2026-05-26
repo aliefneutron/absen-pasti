@@ -96,10 +96,10 @@ export default function Admin() {
   const [isImportingRoster, setIsImportingRoster] = useState(false);
   const rosterFileRef = useRef<HTMLInputElement>(null);
 
-  // Trigger fetchLogs setiap kali reportMonth berubah
+  // Trigger fetchLogs setiap kali reportMonth atau lateTime berubah
   useEffect(() => {
     fetchLogs(reportMonth);
-  }, [reportMonth]);
+  }, [reportMonth, settings?.lateTime]);
 
   // Update reportMonth secara otomatis jika user mengganti reportDate ke bulan yang berbeda
   useEffect(() => {
@@ -125,7 +125,19 @@ export default function Admin() {
         where('month', '==', monthStr)
       );
       const snap = await getDocs(q);
-      const fetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const fetched = snap.docs.map(doc => {
+        const data = doc.data();
+        
+        // Verifikasi Ulang Status Terlambat Berdasarkan Waktu Server Sebenarnya (Mencegah Bypass Klien)
+        if (!data.isEvent && !data.isLeave && data.timestamp) {
+           const dateObj = data.timestamp.toDate ? data.timestamp.toDate() : new Date(data.timestamp);
+           const timeStr = format(dateObj, 'HH:mm');
+           const lateBoundary = settings?.lateTime || '08:00';
+           data.isLate = timeStr > lateBoundary;
+        }
+        
+        return { id: doc.id, ...data };
+      });
       
       // Sort manually to avoid index requirement
       fetched.sort((a: any, b: any) => {
