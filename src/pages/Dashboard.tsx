@@ -1022,11 +1022,11 @@ export default function Dashboard() {
           </CardContent>
           <CardFooter className="bg-slate-50 border-t p-4 flex justify-between items-center">
              <Dialog open={showBidangRoster} onOpenChange={setShowBidangRoster}>
-               <DialogTrigger asChild>
-                 <Button onClick={fetchBidangRoster} disabled={isFetchingBidang} variant="outline" className="w-full text-[10px] uppercase font-black tracking-widest border-indigo-200 text-indigo-600 hover:bg-indigo-50">
-                   <Users size={14} className="mr-2" />
-                   {isFetchingBidang ? 'Memuat Jadwal...' : 'Lihat Jadwal Piket'}
-                 </Button>
+               <DialogTrigger render={
+                 <Button onClick={fetchBidangRoster} disabled={isFetchingBidang} variant="outline" className="w-full text-[10px] uppercase font-black tracking-widest border-indigo-200 text-indigo-600 hover:bg-indigo-50" />
+               }>
+                 <Users size={14} className="mr-2" />
+                 {isFetchingBidang ? 'Memuat Jadwal...' : 'Lihat Jadwal Piket'}
                </DialogTrigger>
                <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col p-0">
                  <DialogHeader className="p-4 border-b bg-slate-50 shrink-0">

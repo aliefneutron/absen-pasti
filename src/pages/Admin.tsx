@@ -817,7 +817,10 @@ export default function Admin() {
         'Total Hari Kerja Act': item.workingDays,
         'Hadir Tepat Waktu': item.totalTepatWaktu,
         'Hadir Terlambat': item.totalTelat,
-        'Izin/Sakit/Cuti/Tugas': item.totalLeave || 0,
+        'Izin': item.totalIzin || 0,
+        'Sakit': item.totalSakit || 0,
+        'Cuti': item.totalCuti || 0,
+        'Tugas Luar': item.totalTugas || 0,
         'Total Hadir': item.totalHadir,
         'Total Alfa': item.alfa
       }));
@@ -944,8 +947,9 @@ export default function Admin() {
   };
 
   const filteredLogs = logs.filter(log => 
-    log.userName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    log.userEmail?.toLowerCase().includes(searchTerm.toLowerCase())
+    !log.isLeave &&
+    (log.userName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    log.userEmail?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const filteredEmployees = employees.filter(emp =>
@@ -957,7 +961,7 @@ export default function Admin() {
   );
 
   // Group data for chart (Daily count for current month)
-  const chartData = logs.reduce((acc: any[], log) => {
+  const chartData = logs.filter(l => !l.isLeave).reduce((acc: any[], log) => {
     const date = log.date;
     const existing = acc.find(i => i.date === date);
     if (existing) {
@@ -1037,7 +1041,11 @@ export default function Admin() {
     const totalTelat = empLogs.filter(l => !l.isLeave && l.isLate).length;
     const totalLateDuration = empLogs.reduce((acc, l) => acc + (l.lateDuration || 0), 0);
     const totalTepatWaktu = totalHadir - totalTelat;
-    const totalLeave = empLogs.filter(l => l.isLeave).length;
+    const totalIzin = empLogs.filter(l => l.isLeave && l.leaveType === 'I').length;
+    const totalSakit = empLogs.filter(l => l.isLeave && l.leaveType === 'S').length;
+    const totalCuti = empLogs.filter(l => l.isLeave && l.leaveType === 'C').length;
+    const totalTugas = empLogs.filter(l => l.isLeave && (!l.leaveType || l.leaveType === 'T')).length;
+    const totalLeave = totalIzin + totalSakit + totalCuti + totalTugas;
 
     const today = new Date();
     const [year, month] = reportMonth.split('-');
@@ -1057,7 +1065,7 @@ export default function Admin() {
     }
     
     const alfa = Math.max(0, workingDays - totalHadir - totalLeave);
-    return { ...emp, totalHadir, totalTelat, totalLateDuration, totalTepatWaktu, totalLeave, alfa, workingDays };
+    return { ...emp, totalHadir, totalTelat, totalLateDuration, totalTepatWaktu, totalIzin, totalSakit, totalCuti, totalTugas, totalLeave, alfa, workingDays };
   });
 
   return (
@@ -1103,7 +1111,7 @@ export default function Admin() {
               <div className="p-4 flex flex-col justify-center">
                 <p className="text-[9px] uppercase font-black text-slate-400 tracking-widest mb-1 group-hover:text-indigo-600 transition-colors">Jumlah Rekaman</p>
                 <div className="flex items-baseline gap-1">
-                  <h3 className="text-3xl font-black text-slate-800 tabular-nums">{logs.length}</h3>
+                  <h3 className="text-3xl font-black text-slate-800 tabular-nums">{logs.filter(l => !l.isLeave).length}</h3>
                   <span className="text-[10px] font-bold text-slate-400 font-mono">UUID</span>
                 </div>
               </div>
@@ -1112,7 +1120,7 @@ export default function Admin() {
               <div className="p-4 flex flex-col justify-center border-l-4 border-amber-500">
                 <p className="text-[9px] uppercase font-black text-slate-400 tracking-widest mb-1">Terlambat</p>
                 <div className="flex items-baseline gap-1">
-                  <h3 className="text-3xl font-black text-amber-600 tabular-nums">{logs.filter(l => l.isLate).length}</h3>
+                  <h3 className="text-3xl font-black text-amber-600 tabular-nums">{logs.filter(l => !l.isLeave && l.isLate).length}</h3>
                   <span className="text-[10px] font-bold text-slate-400 font-mono">PENGGUNA</span>
                 </div>
               </div>
@@ -1469,6 +1477,10 @@ export default function Admin() {
                            <TableHead className="font-black text-[9px] uppercase tracking-widest py-4 text-center">Tepat Wkt</TableHead>
                            <TableHead className="font-black text-[9px] uppercase tracking-widest py-4 text-center">Terlambat</TableHead>
                             <TableHead className="font-black text-[9px] uppercase tracking-widest py-4 text-center">Total Terlambat</TableHead>
+                           <TableHead className="font-black text-[9px] uppercase tracking-widest py-4 text-center text-amber-600">Izin</TableHead>
+                           <TableHead className="font-black text-[9px] uppercase tracking-widest py-4 text-center text-indigo-600">Sakit</TableHead>
+                           <TableHead className="font-black text-[9px] uppercase tracking-widest py-4 text-center text-purple-600">Cuti</TableHead>
+                           <TableHead className="font-black text-[9px] uppercase tracking-widest py-4 text-center text-slate-600">Tugas</TableHead>
                            <TableHead className="font-black text-[9px] uppercase tracking-widest py-4 text-center text-rose-600">Alfa</TableHead>
                          </TableRow>
                       </TableHeader>
@@ -1485,6 +1497,10 @@ export default function Admin() {
                                <TableCell className="py-4 text-center font-bold text-[9px] text-rose-600">
                                   {formatDuration(item.totalLateDuration)}
                                </TableCell>
+                               <TableCell className="py-4 text-center font-bold text-[11px] text-amber-600">{item.totalIzin}</TableCell>
+                               <TableCell className="py-4 text-center font-bold text-[11px] text-indigo-600">{item.totalSakit}</TableCell>
+                               <TableCell className="py-4 text-center font-bold text-[11px] text-purple-600">{item.totalCuti}</TableCell>
+                               <TableCell className="py-4 text-center font-bold text-[11px] text-slate-600">{item.totalTugas}</TableCell>
                                <TableCell className="py-4 text-center font-black text-[12px] text-rose-600 bg-rose-50/30">{item.alfa}</TableCell>
                             </TableRow>
                          ))}

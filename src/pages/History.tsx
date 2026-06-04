@@ -98,7 +98,8 @@ export default function History({ standalone = true }: { standalone?: boolean })
       const log = logs.find(l => l.date === dateStr);
       const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()];
       const isEnabledDay = (settings?.enabledDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']).includes(dayName);
-      const isWorkingDay = isEnabledDay;
+      const isHoliday = !!(settings?.holidays && settings.holidays[dateStr]);
+      const isWorkingDay = isEnabledDay && !isHoliday;
       
       return {
         id: dateStr,
