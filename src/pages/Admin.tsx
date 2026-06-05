@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../components/ui/dialog';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isAfter, isBefore, isSameDay, subMinutes, parse, addMinutes } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { getShiftStatus, DEFAULT_SHIFTS } from '../lib/shift';
 import { BarChart as BarChartIcon, Settings, Download, Search, MapPin, Users, UserPlus, Upload, X, Smartphone, RefreshCw, Edit2, Trash2, FileText, CalendarRange, Clock, AlertTriangle, Navigation } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -131,9 +132,17 @@ export default function Admin() {
         // Verifikasi Ulang Status Terlambat Berdasarkan Waktu Server Sebenarnya (Mencegah Bypass Klien)
         if (!data.isEvent && !data.isLeave && data.timestamp) {
            const dateObj = data.timestamp.toDate ? data.timestamp.toDate() : new Date(data.timestamp);
-           const timeStr = format(dateObj, 'HH:mm');
-           const lateBoundary = settings?.lateTime || '08:00';
-           data.isLate = timeStr > lateBoundary;
+           const shiftSettings = settings?.shifts || DEFAULT_SHIFTS;
+           const currentShift = data.shiftName ? shiftSettings.find((s: any) => s.name === data.shiftName) : null;
+           
+           if (currentShift) {
+               const { isLate } = getShiftStatus(dateObj, currentShift);
+               data.isLate = isLate;
+           } else {
+               const timeStr = format(dateObj, 'HH:mm');
+               const lateBoundary = settings?.lateTime || '08:00';
+               data.isLate = timeStr > lateBoundary;
+           }
         }
         
         return { id: doc.id, ...data };
