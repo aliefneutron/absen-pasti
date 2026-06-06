@@ -38,6 +38,7 @@ export default function Admin() {
       { name: 'Malam', startTime: '19:30', endTime: '07:30' },
     ]
   });
+  const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [employeeSearchTerm, setEmployeeSearchTerm] = useState('');
@@ -97,10 +98,13 @@ export default function Admin() {
   const [isImportingRoster, setIsImportingRoster] = useState(false);
   const rosterFileRef = useRef<HTMLInputElement>(null);
 
-  // Trigger fetchLogs setiap kali reportMonth atau lateTime berubah
+  // Trigger fetchLogs setiap kali reportMonth, isSettingsLoaded, atau settings?.shifts berubah
+  const shiftsStr = JSON.stringify(settings?.shifts);
   useEffect(() => {
-    fetchLogs(reportMonth);
-  }, [reportMonth, settings?.lateTime]);
+    if (isSettingsLoaded) {
+      fetchLogs(reportMonth);
+    }
+  }, [reportMonth, isSettingsLoaded, settings?.lateTime, shiftsStr]);
 
   // Update reportMonth secara otomatis jika user mengganti reportDate ke bulan yang berbeda
   useEffect(() => {
@@ -843,9 +847,15 @@ export default function Admin() {
   };
 
   const fetchSettings = async () => {
-    const docSnap = await getDoc(doc(db, 'settings', 'global'));
-    if (docSnap.exists()) {
-      setSettings(docSnap.data() as any);
+    try {
+      const docSnap = await getDoc(doc(db, 'settings', 'global'));
+      if (docSnap.exists()) {
+        setSettings(docSnap.data() as any);
+      }
+    } catch (err) {
+      console.error("fetchSettings error:", err);
+    } finally {
+      setIsSettingsLoaded(true);
     }
   };
 
