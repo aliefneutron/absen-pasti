@@ -1002,11 +1002,13 @@ export default function Admin() {
     const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(reportDate).getDay()];
     const isEnabledDay = ((settings as any).enabledDays || []).includes(dayName);
     const isHoliday = !!((settings as any).holidays && (settings as any).holidays[reportDate]);
+    const monthStr = reportDate.substring(0, 7);
+    const hasRosterThisMonth = rosters.some(r => (r.userId === emp.id || r.userId === emp.uid || r.userEmail?.toLowerCase() === email) && r.date.startsWith(monthStr));
     
     if (roster) {
       isWorkingDay = roster.shiftName !== 'OFF';
     } else {
-      isWorkingDay = isEnabledDay && !isHoliday;
+      isWorkingDay = hasRosterThisMonth ? false : (isEnabledDay && !isHoliday);
     }
 
     return { ...emp, log, roster, isWorkingDay };
@@ -1084,6 +1086,8 @@ export default function Admin() {
     const endOfThisMonth = new Date(parseInt(year), parseInt(month), 0);
     const end = endOfThisMonth > today && start.getMonth() === today.getMonth() && start.getFullYear() === today.getFullYear() ? today : endOfThisMonth;
 
+    const hasRosterThisMonth = rosters.some(r => (r.userId === emp.id || r.userId === emp.uid || r.userEmail?.toLowerCase() === email) && r.date.startsWith(reportMonth));
+
     let workingDays = 0;
     let alfa = 0;
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
@@ -1097,7 +1101,7 @@ export default function Admin() {
       if (roster) {
         isWorkingDay = roster.shiftName !== 'OFF';
       } else {
-        isWorkingDay = isEnabledDay && !isHoliday;
+        isWorkingDay = hasRosterThisMonth ? false : (isEnabledDay && !isHoliday);
       }
       
       if (isWorkingDay) {
