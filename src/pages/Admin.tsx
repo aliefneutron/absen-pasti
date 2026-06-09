@@ -808,7 +808,7 @@ export default function Admin() {
         'Nama Lengkap': item.displayName || item.name || 'Unknown',
         'NIP': item.nip || '-',
         'Bidang': item.bidang || '-',
-        'Status': item.log ? (item.log.isLeave ? `IZIN/SAKIT (${item.log.leaveType})` : (item.log.isLate ? 'TERLAMBAT' : 'TEPAT WAKTU')) : (item.roster && item.roster.shiftName !== 'OFF' ? 'ALFA / TIDAK ABSEN' : 'LIBUR / TIDAK TERJADWAL'),
+        'Status': item.log ? (item.log.isLeave ? `IZIN/SAKIT (${item.log.leaveType})` : (item.log.isLate ? 'TERLAMBAT' : 'TEPAT WAKTU')) : (item.isWorkingDay ? 'ALFA / TIDAK ABSEN' : 'LIBUR / TIDAK TERJADWAL'),
         'Waktu (Masuk | Pulang)': item.log ? (item.log.isLeave ? '-' : `${format(item.log.timestamp?.toDate ? item.log.timestamp.toDate() : new Date(item.log.timestamp), 'HH:mm:ss')} | ${item.log.checkOutTimestamp ? format(item.log.checkOutTimestamp?.toDate ? item.log.checkOutTimestamp.toDate() : new Date(item.log.checkOutTimestamp), 'HH:mm:ss') : '--:--:--'}`) : '-'
       }));
       const ws = XLSX.utils.json_to_sheet(dailyData);
@@ -997,7 +997,19 @@ export default function Admin() {
     const email = emp.email?.toLowerCase();
     const log = logs.find(l => l.userEmail?.toLowerCase() === email && l.date === reportDate);
     const roster = rosters.find(r => (r.userId === emp.id || r.userId === emp.uid || r.userEmail?.toLowerCase() === email) && r.date === reportDate);
-    return { ...emp, log, roster };
+    
+    let isWorkingDay = false;
+    const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(reportDate).getDay()];
+    const isEnabledDay = ((settings as any).enabledDays || []).includes(dayName);
+    const isHoliday = !!((settings as any).holidays && (settings as any).holidays[reportDate]);
+    
+    if (roster) {
+      isWorkingDay = roster.shiftName !== 'OFF';
+    } else {
+      isWorkingDay = isEnabledDay && !isHoliday;
+    }
+
+    return { ...emp, log, roster, isWorkingDay };
   });
 
   // First, filter by search term (Name, NIP, Bidang, Email) to support dynamic badge adjustments
@@ -1019,8 +1031,8 @@ export default function Admin() {
     tepatWaktu: searchedDailyReportData.filter(item => item.log && !item.log.isLeave && !item.log.isLate).length,
     terlambat: searchedDailyReportData.filter(item => item.log && !item.log.isLeave && item.log.isLate).length,
     izin: searchedDailyReportData.filter(item => item.log?.isLeave === true).length,
-    alfa: searchedDailyReportData.filter(item => !item.log && item.roster && item.roster.shiftName !== 'OFF').length,
-    libur: searchedDailyReportData.filter(item => !item.log && (!item.roster || item.roster.shiftName === 'OFF')).length,
+    alfa: searchedDailyReportData.filter(item => !item.log && item.isWorkingDay).length,
+    libur: searchedDailyReportData.filter(item => !item.log && !item.isWorkingDay).length,
   };
 
   // Filtered Daily Report Data based on status filters applied to the searched list
@@ -1042,10 +1054,10 @@ export default function Admin() {
       return isLeave;
     }
     if (dailyStatusFilter === 'alfa') {
-      return !hasLog && isRosterActive;
+      return !hasLog && item.isWorkingDay;
     }
     if (dailyStatusFilter === 'libur') {
-      return !hasLog && !isRosterActive;
+      return !hasLog && !item.isWorkingDay;
     }
 
     return true;
@@ -1073,17 +1085,30 @@ export default function Admin() {
     const end = endOfThisMonth > today && start.getMonth() === today.getMonth() && start.getFullYear() === today.getFullYear() ? today : endOfThisMonth;
 
     let workingDays = 0;
+    let alfa = 0;
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const dateStr = format(d, 'yyyy-MM-dd');
       const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()];
       const isEnabledDay = ((settings as any).enabledDays || []).includes(dayName);
       const isHoliday = !!((settings as any).holidays && (settings as any).holidays[dateStr]);
-      if (isEnabledDay && !isHoliday) {
+      
+      const roster = rosters.find(r => (r.userId === emp.id || r.userId === emp.uid || r.userEmail?.toLowerCase() === email) && r.date === dateStr);
+      let isWorkingDay = false;
+      if (roster) {
+        isWorkingDay = roster.shiftName !== 'OFF';
+      } else {
+        isWorkingDay = isEnabledDay && !isHoliday;
+      }
+      
+      if (isWorkingDay) {
          workingDays++;
+         const hasLog = empLogs.some(l => l.date === dateStr);
+         if (!hasLog) {
+            alfa++;
+         }
       }
     }
     
-    const alfa = Math.max(0, workingDays - totalHadir - totalLeave);
     return { ...emp, totalHadir, totalTelat, totalLateDuration, totalTepatWaktu, totalIzin, totalSakit, totalCuti, totalTugas, totalLeave, alfa, workingDays };
   });
 
@@ -1465,7 +1490,7 @@ export default function Admin() {
                                                </div>
                                             </>
                                          )
-                                      ) : item.roster && item.roster.shiftName !== 'OFF' ? (
+                                      ) : item.isWorkingDay ? (
                                          <Badge variant="outline" className="text-[9px] font-black uppercase tracking-tighter border-rose-200 text-rose-500 bg-rose-50/50">
                                             <AlertTriangle size={10} className="mr-1"/> ALFA / TIDAK ABSEN
                                          </Badge>
