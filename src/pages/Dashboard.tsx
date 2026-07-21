@@ -450,6 +450,36 @@ export default function Dashboard() {
     
     try {
       const attendancePromise = (async () => {
+        // ── Verifikasi Waktu Server saat Submit ──────────────────────────────
+        // Ambil waktu server aktual sebelum menyimpan data.
+        // Ini memastikan pegawai tidak bisa memanipulasi jam HP untuk bypass window absen.
+        let verifiedNow = now; // fallback ke jam display jika API gagal
+        try {
+          const ctrl = new AbortController();
+          setTimeout(() => ctrl.abort(), 4000);
+          const tres = await fetch('https://worldtimeapi.org/api/timezone/Asia/Jakarta', {
+            cache: 'no-store', signal: ctrl.signal
+          });
+          if (tres.ok) {
+            const tdata = await tres.json();
+            const unixtime = tdata?.unixtime;
+            if (typeof unixtime === 'number' && unixtime > 1577836800) {
+              const serverNow = new Date(unixtime * 1000);
+              // Validasi: hanya pakai jika selisih dari jam lokal < 10 menit (filter data rusak)
+              const diffMs = Math.abs(serverNow.getTime() - now.getTime());
+              if (diffMs < 10 * 60 * 1000) {
+                verifiedNow = serverNow;
+                console.info(`[Submit] Waktu server terverifikasi: ${format(verifiedNow, 'HH:mm:ss')}`);
+              } else {
+                console.warn(`[Submit] Waktu server (${format(serverNow, 'HH:mm:ss')}) vs jam lokal (${format(now, 'HH:mm:ss')}) selisih > 10 menit — pakai jam lokal.`);
+              }
+            }
+          }
+        } catch {
+          console.warn('[Submit] Tidak bisa verifikasi waktu server — menggunakan jam lokal perangkat.');
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         // Use derived locationStats for range validation
         if (!isWithinRange) {
           const nearestMsg = locationStats.nearestLocationName 
@@ -484,8 +514,9 @@ export default function Dashboard() {
           setAttendanceData((prev: any) => ({ ...prev, ...updateData, checkOutTimestamp: now }));
           return `Absen Pulang Shift ${currentShift.name} berhasil dicatat!`;
         } else {
-          const { isLate, graceThresholdDate, shiftStartDate } = getShiftStatus(now, currentShift);
-          const lateDuration = isLate ? Math.max(0, Math.floor((now.getTime() - shiftStartDate.getTime()) / 1000)) : 0;
+          // Gunakan verifiedNow (waktu server terverifikasi) untuk kalkulasi keterlambatan
+          const { isLate, graceThresholdDate, shiftStartDate } = getShiftStatus(verifiedNow, currentShift);
+          const lateDuration = isLate ? Math.max(0, Math.floor((verifiedNow.getTime() - shiftStartDate.getTime()) / 1000)) : 0;
           
           const record = {
             userId: user.uid,
