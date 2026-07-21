@@ -147,8 +147,30 @@ export default function Dashboard() {
 
   useEffect(() => {
     const syncServerTime = async () => {
-      // Primary: timeapi.io dengan timeout 5 detik
-      // Penting: tambahkan '+07:00' agar parsing JS mengenali ini sebagai WIB, bukan UTC
+      // Strategi 1: worldtimeapi.org — mengembalikan unix timestamp (angka murni, tidak ada masalah parsing)
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const start = performance.now();
+        const res = await fetch(
+          'https://worldtimeapi.org/api/timezone/Asia/Jakarta',
+          { cache: 'no-store', signal: controller.signal }
+        );
+        clearTimeout(timeout);
+        if (!res.ok) throw new Error('WorldTimeAPI failed');
+        const data = await res.json();
+        // data.unixtime = Unix timestamp dalam DETIK (bukan ms), sudah benar
+        const serverTime = data.unixtime * 1000;
+        if (isNaN(serverTime)) throw new Error('Invalid unixtime from WorldTimeAPI');
+        const latency = (performance.now() - start) / 2;
+        timeOffset.current = (serverTime + latency) - performance.now();
+        console.info(`[Time Sync] ✅ WorldTimeAPI OK. Offset: ${Math.round(timeOffset.current / 1000)}s`);
+        return;
+      } catch (err1) {
+        console.warn('[Time Sync] WorldTimeAPI gagal, mencoba timeapi.io...', err1);
+      }
+
+      // Strategi 2: timeapi.io — potong microseconds jadi 3 digit agar JS bisa parse
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
@@ -160,43 +182,51 @@ export default function Dashboard() {
         clearTimeout(timeout);
         if (!res.ok) throw new Error('TimeAPI failed');
         const data = await res.json();
-        // data.dateTime contohnya "2026-07-21T08:03:47.123456" — tanpa info timezone!
-        // Tanpa suffix, JS akan memparsing sebagai UTC → jam jadi 7 jam lebih awal (atau berbeda).
-        // Tambahkan '+07:00' agar hasilnya benar sebagai WIB.
-        const serverTime = new Date(data.dateTime + '+07:00').getTime();
+        // data.dateTime contoh: "2026-07-21T08:03:47.1234567" (7 digit, JS hanya support 3)
+        // Potong ke 3 digit desimal lalu tambah timezone WIB
+        const dtTrimmed = (data.dateTime as string).replace(/(\.\d{3})\d+/, '$1');
+        const serverTime = new Date(dtTrimmed + '+07:00').getTime();
+        if (isNaN(serverTime)) throw new Error('Invalid dateTime from timeapi.io');
         const latency = (performance.now() - start) / 2;
         timeOffset.current = (serverTime + latency) - performance.now();
-        console.info(`[Time Sync] OK via timeapi.io. Offset: ${Math.round(timeOffset.current / 1000)}s`);
-      } catch (err) {
-        // Fallback: HTTP Date header (kurang akurat, tapi lebih baik dari jam lokal)
-        console.warn('TimeAPI gagal, mencoba fallback HTTP Date header...');
-        try {
-          const start = performance.now();
-          const res = await fetch(window.location.href, { method: 'HEAD', cache: 'no-store' });
-          const dateHeader = res.headers.get('Date');
-          if (dateHeader) {
-            const serverTime = new Date(dateHeader).getTime();
-            const latency = (performance.now() - start) / 2;
-            timeOffset.current = (serverTime + latency) - performance.now();
-            console.warn('[Time Sync] Fallback HTTP Date header digunakan.');
-          } else {
-            throw new Error('No Date header');
-          }
-        } catch {
-          // Last resort: pakai jam lokal perangkat
-          timeOffset.current = Date.now() - performance.now();
-          console.warn('[Time Sync] Semua sumber gagal. Menggunakan jam lokal perangkat.');
-        }
+        console.info(`[Time Sync] ✅ timeapi.io OK. Offset: ${Math.round(timeOffset.current / 1000)}s`);
+        return;
+      } catch (err2) {
+        console.warn('[Time Sync] timeapi.io gagal, mencoba HTTP Date header...', err2);
+      }
+
+      // Strategi 3: HTTP Date header dari server hosting
+      try {
+        const start = performance.now();
+        const res = await fetch(window.location.href, { method: 'HEAD', cache: 'no-store' });
+        const dateHeader = res.headers.get('Date');
+        if (!dateHeader) throw new Error('No Date header');
+        const serverTime = new Date(dateHeader).getTime();
+        if (isNaN(serverTime)) throw new Error('Invalid Date header');
+        const latency = (performance.now() - start) / 2;
+        timeOffset.current = (serverTime + latency) - performance.now();
+        console.warn('[Time Sync] ⚠️ Fallback HTTP Date header digunakan.');
+      } catch {
+        // Last resort: jam lokal perangkat (sudah benar di kebanyakan kasus)
+        timeOffset.current = Date.now() - performance.now();
+        console.warn('[Time Sync] ⚠️ Semua sumber gagal. Menggunakan jam lokal perangkat.');
       }
     };
 
+    // Sync saat pertama load
     syncServerTime();
+    // Re-sync setiap 5 menit agar tetap akurat selama sesi panjang
+    const resyncInterval = setInterval(syncServerTime, 5 * 60 * 1000);
 
     const timer = setInterval(() => {
       // performance.now() adalah timer monotonic — tidak terpengaruh perubahan jam sistem
       setNow(new Date(performance.now() + timeOffset.current));
     }, 1000);
-    return () => clearInterval(timer);
+
+    return () => {
+      clearInterval(timer);
+      clearInterval(resyncInterval);
+    };
   }, []);
 
   useEffect(() => {
