@@ -101,7 +101,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    // Fallback timeout: jika Firebase tidak merespons dalam 10 detik, set loading false
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 10000);
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      clearTimeout(timeout);
       setUser(currentUser);
       
       try {
@@ -120,7 +126,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    return unsubscribe;
+    return () => {
+      clearTimeout(timeout);
+      unsubscribe();
+    };
   }, []);
 
   const isAdmin = profile?.role === 'admin' || user?.email === 'aliefneutron@gmail.com';

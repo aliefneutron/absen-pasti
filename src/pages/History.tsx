@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/auth-context';
-import { collection, query, where, orderBy, getDocs, doc, getDoc, limit } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, doc, getDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
@@ -12,7 +12,7 @@ import { Calendar as CalendarIcon, Clock, MapPin, Camera, AlertTriangle } from '
 export default function History({ standalone = true }: { standalone?: boolean }) {
   const { user } = useAuth();
   const [logs, setLogs] = useState<any[]>([]);
-  const [settings, setSettings] = useState<any>({ 
+  const [settings, setSettings] = useState<any>({
     enabledDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
     shifts: [
       { name: 'Pagi', startTime: '07:30', endTime: '13:30' },
@@ -28,26 +28,26 @@ export default function History({ standalone = true }: { standalone?: boolean })
       setLoading(true);
       Promise.all([fetchLogs(), fetchSettings()]).finally(() => setLoading(false));
     }
-  }, [user]);
+  }, [user, selectedMonth]);
 
   const fetchLogs = async () => {
     try {
-      // Paginasi History: Batasi muat data hanya 50 data log terakhir agar irit baca database
+      // Filter berdasarkan bulan yang dipilih agar data selalu akurat
       const q = query(
         collection(db, 'attendance'),
         where('userId', '==', user?.uid),
-        limit(100)
+        where('month', '==', selectedMonth)
       );
       const snap = await getDocs(q);
       const fetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
+
       // Sort manually to avoid index requirement
       fetched.sort((a: any, b: any) => {
         const timeA = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : new Date(a.timestamp || 0).getTime();
         const timeB = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : new Date(b.timestamp || 0).getTime();
         return timeB - timeA;
       });
-      
+
       setLogs(fetched);
     } catch (err) {
       console.error(err);
@@ -67,7 +67,7 @@ export default function History({ standalone = true }: { standalone?: boolean })
 
   const generateHistoryData = () => {
     if (!settings) return [];
-    
+
     let start, end;
     const today = new Date();
 
@@ -75,12 +75,12 @@ export default function History({ standalone = true }: { standalone?: boolean })
       const [yearStr, monthStr] = selectedMonth.split('-');
       const year = parseInt(yearStr);
       const month = parseInt(monthStr) - 1;
-      
+
       start = new Date(year, month, 1);
       const endOfSelectedMonth = new Date(year, month + 1, 0);
-      
-      end = (start.getMonth() === today.getMonth() && start.getFullYear() === today.getFullYear()) 
-        ? today 
+
+      end = (start.getMonth() === today.getMonth() && start.getFullYear() === today.getFullYear())
+        ? today
         : endOfSelectedMonth;
 
       if (start > today) return [];
@@ -89,10 +89,10 @@ export default function History({ standalone = true }: { standalone?: boolean })
       start.setDate(today.getDate() - 7);
       end = today;
     }
-    
+
     const days = eachDayOfInterval({ start, end });
     days.reverse();
-    
+
     return days.map(d => {
       const dateStr = format(d, 'yyyy-MM-dd');
       const log = logs.find(l => l.date === dateStr);
@@ -100,7 +100,7 @@ export default function History({ standalone = true }: { standalone?: boolean })
       const isEnabledDay = (settings?.enabledDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']).includes(dayName);
       const isHoliday = !!(settings?.holidays && settings.holidays[dateStr]);
       const isWorkingDay = isEnabledDay && !isHoliday;
-      
+
       return {
         id: dateStr,
         date: d,
@@ -129,11 +129,11 @@ export default function History({ standalone = true }: { standalone?: boolean })
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Data verifikasi dan rekam jejak kehadiran</p>
           </div>
           <div className="flex items-center gap-2">
-            <Input 
-              type="month" 
-              value={selectedMonth} 
-              onChange={(e) => setSelectedMonth(e.target.value)} 
-              className="h-9 font-mono text-xs w-40 bg-white" 
+            <Input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="h-9 font-mono text-xs w-40 bg-white"
             />
             <Badge variant="outline" className="h-fit py-1 px-3 border-slate-200 text-xs font-bold text-slate-500">
               {logs.length} CATATAN
@@ -149,7 +149,7 @@ export default function History({ standalone = true }: { standalone?: boolean })
             <Badge variant="outline" className="text-[9px] border-slate-200 font-black">{historyData.filter(d => d.log).length} CATATAN</Badge>
           </div>
         )}
-        
+
         <div className="flex-1 overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black uppercase">
@@ -190,7 +190,7 @@ export default function History({ standalone = true }: { standalone?: boolean })
                       )}
                       {!item.log && (
                         <div className="flex items-center gap-1 mt-1.5 ml-5 text-slate-400 font-bold">
-                           <span>-</span>
+                          <span>-</span>
                         </div>
                       )}
                     </td>
@@ -199,7 +199,7 @@ export default function History({ standalone = true }: { standalone?: boolean })
                         item.log.isLeave ? (
                           <div className="flex flex-col gap-1">
                             <span className="w-fit px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-[9px] font-black uppercase tracking-widest border border-indigo-200">
-                               {item.log.leaveType === 'I' ? 'IZIN' : item.log.leaveType === 'S' ? 'SAKIT' : item.log.leaveType === 'C' ? 'CUTI' : 'TUGAS LUAR'}
+                              {item.log.leaveType === 'I' ? 'IZIN' : item.log.leaveType === 'S' ? 'SAKIT' : item.log.leaveType === 'C' ? 'CUTI' : 'TUGAS LUAR'}
                             </span>
                             <span className="text-[8px] text-indigo-400 font-bold uppercase ml-1">Admin Bypass</span>
                           </div>
@@ -216,16 +216,16 @@ export default function History({ standalone = true }: { standalone?: boolean })
                         )
                       ) : !item.isWorkingDay ? (
                         <div className="flex flex-col gap-1">
-                           <span className="w-fit px-3 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-200">
-                             TIDAK ADA ABSEN
-                           </span>
+                          <span className="w-fit px-3 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-200">
+                            TIDAK ADA ABSEN
+                          </span>
                         </div>
                       ) : (
                         <div className="flex flex-col gap-1">
-                           <span className="w-fit px-3 py-1 bg-rose-50 text-rose-500 rounded-lg text-[9px] font-black uppercase tracking-widest border border-rose-200">
-                             <AlertTriangle size={10} className="inline mr-1 mb-0.5" />ALFA / TIDAK ABSEN
-                           </span>
-                           <span className="text-[8px] text-rose-400 font-bold uppercase ml-1">Data Tidak Ditemukan</span>
+                          <span className="w-fit px-3 py-1 bg-rose-50 text-rose-500 rounded-lg text-[9px] font-black uppercase tracking-widest border border-rose-200">
+                            <AlertTriangle size={10} className="inline mr-1 mb-0.5" />ALFA / TIDAK ABSEN
+                          </span>
+                          <span className="text-[8px] text-rose-400 font-bold uppercase ml-1">Data Tidak Ditemukan</span>
                         </div>
                       )}
                     </td>
